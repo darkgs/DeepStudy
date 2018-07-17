@@ -31,6 +31,8 @@ class Net(nn.Module):
 		return x
 
 def main():
+	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 	transform = transforms.Compose(
 			[transforms.ToTensor(),
 			transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -47,7 +49,7 @@ def main():
 	dataiter = iter(trainloader)
 	images, labels = dataiter.next()
 
-	net = Net()
+	net = Net().to(device)
 
 	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
@@ -59,7 +61,7 @@ def main():
 		for i, data in enumerate(trainloader, 0):
 			# inputs = [batch_size, depth, width, height]
 			# labels = [batch_size]
-			inputs, labels = data
+			inputs, labels = data[0].to(device), data[1].to(device)
 
 			# zero the parameter gradients
 			optimizer.zero_grad()
@@ -81,7 +83,7 @@ def main():
 	total = 0
 	with torch.no_grad():
 		for data in testloader:
-			images, labels = data
+			images, labels = data[0].to(device), data[1].to(device)
 			outputs = net(images)
 			_, predicted = torch.max(outputs.data, 1)
 			total += labels.size(0)
