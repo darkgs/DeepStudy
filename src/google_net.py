@@ -9,27 +9,55 @@ import torchvision
 import torchvision.transforms as transforms
 
 import numpy as np
-
-
-class Net(nn.Module):
-	def __init__(self):
-		super(Net, self).__init__()
-		self.conv1 = nn.Conv2d(3, 6, 5)
-		self.pool = nn.MaxPool2d(2, 2)
-		self.conv2 = nn.Conv2d(6, 16, 5)
-		self.fc1 = nn.Linear(16 * 5 * 5, 120)
-		self.fc2 = nn.Linear(120, 84)
-		self.fc3 = nn.Linear(84, 10)
+class Inception(nn.Module):
+	def __init__(self, prev_channel,
+			c_1x1, c_3x3_r, c_3x3, c_5x5_r, c_5x5, c_pool):
+		super(Inception, self).__init__()
 
 	def forward(self, x):
-		x = self.pool(F.relu(self.conv1(x)))
-		x = self.pool(F.relu(self.conv2(x)))
-		x = x.view(-1, 16 * 5 * 5)
-		x = F.relu(self.fc1(x))
-		x = F.relu(self.fc2(x))
-		x = self.fc3(x)
 		return x
 
+class GoogLeNet(nn.Module):
+
+	def __init__(self):
+		super(GoogLeNet, self).__init__()
+
+		# input_size : 32x32x3
+		self.step_1 = nn.Sequential(
+			self._conv2d(3, 64, 7, stride=1, padding=3),				# stride 2 => 1, output_size : 32x32x64
+			nn.MaxPool2d(3, stride=2, padding=1),						# output_size : 16x16x64
+			nn.LocalResponseNorm(16),
+			self._conv2d_reduce(64, 64, 192, 3, stride=1, padding=1),	# output_size : 16x16x192
+			nn.LocalResponseNorm(16),
+			nn.MaxPool2d(3, stride=2, padding=1),						# output_size : 8x8x192
+			self._inception(192, c_1x1=64, c_3x3_r=96, c_3x3=128,
+				c_5x5_r=16, c_5x5=32, c_pool=32) 						# output_size : 8x8x256
+		)
+
+		self.fc3 = nn.Linear(8*8*192, 10)
+
+	def _conv2d(self, *args, **dict_args):
+		return nn.Sequential(
+			nn.Conv2d(*args, **dict_args),
+			nn.ReLU(),
+		)
+
+	def _conv2d_reduce(self, prev_channel, *args, **dict_args):
+		return nn.Sequential(
+			nn.Conv2d(prev_channel, args[0], 1, 1),
+			nn.Conv2d(*args, **dict_args),
+			nn.ReLU(),
+		)
+
+	def _inception(self, prev_channel, **dict_args):
+		return Inception(prev_channel, **dict_args)
+
+	def forward(self, x):
+		x = self.step_1(x)
+		x = x.view(-1, 8*8*192)
+		x = self.fc3(x)
+
+		return x
 
 def main():
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -50,7 +78,7 @@ def main():
 	dataiter = iter(trainloader)
 	images, labels = dataiter.next()
 
-	net = Net().to(device)
+	net = GoogLeNet().to(device)
 
 	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
@@ -69,7 +97,8 @@ def main():
 
 			# outputs = [batch_size, classes]
 			outputs = net(inputs)
-			loss = criterion(outputs, labels)
+			logits = F.log_softmax(outputs, dim=1)
+			loss = criterion(logits, labels)
 			loss.backward()
 			optimizer.step()
 

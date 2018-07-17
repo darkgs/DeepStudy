@@ -1,3 +1,4 @@
 data/
 tags
 *.pyc
+*.swp
