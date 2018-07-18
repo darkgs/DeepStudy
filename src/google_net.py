@@ -1,4 +1,6 @@
 
+import time
+
 import torch
 import torch.optim as optim
 
@@ -32,6 +34,14 @@ class ModuleGenerator(object):
 		return nn.Sequential(
 			nn.MaxPool2d(3, **dict_args),
 			nn.Conv2d(prev_channel, next_channel, 1, 1),
+		)
+
+	@staticmethod
+	def fc(prev_channel, next_channel):
+		return nn.Sequential(
+			nn.Linear(prev_channel, next_channel),
+			nn.BatchNorm1d(next_channel),
+			nn.ReLU(True),
 		)
 
 class Inception(nn.Module):
@@ -84,11 +94,10 @@ class GoogLeNet(nn.Module):
 
 		# input_size : 1x(6*6*128)
 		self.aux_classifier_1_rt = nn.Sequential(
-			nn.Linear(6*6*128, 1024),
-			nn.Linear(1024, 128),
-			nn.Linear(128, 10),
-#			nn.BatchNorm1d(10),
-#			nn.ReLU(True),
+			ModuleGenerator.fc(6*6*128, 1024),
+			ModuleGenerator.fc(1024, 128),
+			ModuleGenerator.fc(128, 10),
+			nn.Softmax(dim=1),
 		)
 
 		# input_size : 16x16x512
@@ -110,9 +119,10 @@ class GoogLeNet(nn.Module):
 
 		# input_size : 1x(6*6*128)
 		self.aux_classifier_2_rt = nn.Sequential(
-			nn.Linear(6*6*128, 1024),
-			nn.Linear(1024, 128),
-			nn.Linear(128, 10),
+			ModuleGenerator.fc(6*6*128, 1024),
+			ModuleGenerator.fc(1024, 128),
+			ModuleGenerator.fc(128, 10),
+			nn.Softmax(dim=1),
 		)
 
 		# input_size : 16x16x528
@@ -134,8 +144,9 @@ class GoogLeNet(nn.Module):
 
 		# input_size : 1x(1024)
 		self.classifier_rt = nn.Sequential(
-			nn.Linear(1024, 128),
-			nn.Linear(128, 10),
+			ModuleGenerator.fc(1024, 128),
+			ModuleGenerator.fc(128, 10),
+			nn.Softmax(dim=1),
 		)
 
 	def forward(self, x):
@@ -154,21 +165,34 @@ class GoogLeNet(nn.Module):
 		out_3 = out_3.view(-1, 1*1*1024)
 		out_3 = self.classifier_rt(out_3)
 
-		return [out_1, out_2, out_3]
+		return out_1, out_2, out_3
 
 
 def main():
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-	transform = transforms.Compose(
-			[transforms.ToTensor(),
-			transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+	# From T.B
+	transform_train = transforms.Compose(
+			[
+				transforms.RandomHorizontalFlip(),
+				transforms.RandomCrop(32, 4),
+				transforms.ToTensor(),
+				transforms.Normalize((0.4914, 0.4822, 0.4465),
+					(0.247, 0.243, 0.261)),
+			])
 
-	trainset = torchvision.datasets.CIFAR10(root='./data', train=True, transform=transform)
-	trainloader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True, num_workers=4)
+	transform_test = transforms.Compose(
+			[
+				transforms.ToTensor(),
+				transforms.Normalize((0.4914, 0.4822, 0.4465),
+					(0.247, 0.243, 0.261)),
+			])
 
-	testset = torchvision.datasets.CIFAR10(root='./data', train=False, transform=transform)
-	testloader = torch.utils.data.DataLoader(testset, batch_size=4, shuffle=True, num_workers=4)
+	trainset = torchvision.datasets.CIFAR10(root='./data', train=True, transform=transform_train)
+	trainloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=8)
+
+	testset = torchvision.datasets.CIFAR10(root='./data', train=False, transform=transform_test)
+	testloader = torch.utils.data.DataLoader(testset, batch_size=16, shuffle=False, num_workers=8)
 
 	classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
@@ -176,51 +200,61 @@ def main():
 	dataiter = iter(trainloader)
 	images, labels = dataiter.next()
 
-	net = GoogLeNet().to(device)
+	model = GoogLeNet().to(device)
 
 	criterion = nn.CrossEntropyLoss()
-	optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+#	optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+	optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=5e-4)
 
-	for epoch in range(2):
-		running_loss = 0.0
+	def test():
+		with torch.no_grad():
+			correct = 0
+			total = 0
+			model.eval()
+			for i, data in enumerate(testloader, 0):
+				images, labels = data[0].to(device), data[1].to(device)
+				_, _, out_3 = model(images)
+				_, predicted = torch.max(out_3.data, 1)
+				total += labels.size(0)
+				correct += (predicted == labels).sum().item()
 
-		# [TODO] batchify
+		return float(correct) * 100.0 / float(total)
+
+
+	def train():
+		model.train()
+		acum_loss = 0.0
+		count = 0
 		for i, data in enumerate(trainloader, 0):
-			# inputs = [batch_size, depth, width, height]
-			# labels = [batch_size]
 			inputs, labels = data[0].to(device), data[1].to(device)
 
 			# zero the parameter gradients
 			optimizer.zero_grad()
 
 			# outputs = [batch_size, classes]
-			outputs = net(inputs)
-			loss = 0.0
-			for i in range(len(outputs)):
-				logit = F.log_softmax(outputs[i], dim=1)
-				loss += criterion(logit, labels) * (1.0 if (i == len(outputs) - 1) else 0.3)
+			out_1, out_2, out_3 = model(inputs)
+			loss_1 = criterion(out_1, labels) * 0.3
+			loss_2 = criterion(out_2, labels) * 0.3
+#			loss_1 = criterion(out_1, labels)
+#			loss_2 = criterion(out_2, labels)
+			loss_3 = criterion(out_3, labels) * 2.4
+
+			loss = loss_1 + loss_2 + loss_3
 			loss.backward()
+
 			optimizer.step()
 
 			# print statistics
-			running_loss += loss.item()
-			if i % 2000 == 1999:    # print every 2000 mini-batches
-				print('[%d, %5d] loss: %.3f' %
-					(epoch + 1, i + 1, running_loss / 2000))
-				running_loss = 0.0
+			acum_loss += loss.item()
+			count += 1
+		return float(acum_loss) / float(count)
 
-	correct = 0
-	total = 0
-	with torch.no_grad():
-		for data in testloader:
-			images, labels = data[0].to(device), data[1].to(device)
-			outputs = net(images)
-			_, predicted = torch.max(outputs.data, 1)
-			total += labels.size(0)
-			correct += (predicted == labels).sum().item()
 
-	print('Accuracy of the network on the 10000 test images: %d %%' % (
-				100 * correct / total))
+	start_time = time.time()
+	for epoch in range(20):
+		epoch_loss = train()
+		acc = test()
+		print('epoch {} : loss({}) acc({}%) time({})'.format(epoch, epoch_loss, acc, time.time()-start_time))
 
 
 if __name__ == '__main__':
