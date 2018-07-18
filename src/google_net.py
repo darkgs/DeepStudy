@@ -237,7 +237,7 @@ def main():
 			loss_2 = criterion(out_2, labels) * 0.3
 #			loss_1 = criterion(out_1, labels)
 #			loss_2 = criterion(out_2, labels)
-			loss_3 = criterion(out_3, labels) * 2.4
+			loss_3 = criterion(out_3, labels)
 
 			loss = loss_1 + loss_2 + loss_3
 			loss.backward()
