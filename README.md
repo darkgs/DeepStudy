@@ -14,3 +14,4 @@ Deep learning paper implementation study at the <a href="https://datalab.snu.ac.
 ** Epoch 300 => Accuracy 79.65% took 28728 secs(about 8 hour)
 ** ~ Epoch 900 => Accuracy 78~81%
 * With BathNormalization on every Conv Layers, Learning rate : 1e-3
+** Epoch 10 => Accuracy 61.45% took 1149 secs(about half hour)
