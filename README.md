@@ -1,11 +1,12 @@
 # DeepStudy
+Deep learning paper implementation study at the <a href="https://datalab.snu.ac.kr/">DataMining Lab</a> in the Seoul National University.
 
-## GoogLeNet
-### Hyper Parameters
+# GoogLeNet
+## Hyper Parameters
 * Loss = CrossEntropyLoss
 * Adam Optimizer = learning rate : 1e-3, weight_decay : 5e-4
 
-### Experiments
+## Experiments
 * Dataset = CIFAR10
 * Epoch 10 => Accuracy 48.89% took 1054 secs(about half hour)
 * Epoch 100 => Accuracy 75.62% took 9649 secs(about 2.5 hour)
