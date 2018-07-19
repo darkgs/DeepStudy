@@ -1,5 +1,5 @@
 # DeepStudy
-Deep learning paper implementation study at the <a href="https://datalab.snu.ac.kr/">DataMining Lab</a> in the Seoul National University.
+Deep learning paper implementation study at the <a href="https://datalab.snu.ac.kr/">DataMining Lab</a> in the <a href="http://www.snu.ac.kr">Seoul National University</a>.
 
 # GoogLeNet
 ## Hyper Parameters
