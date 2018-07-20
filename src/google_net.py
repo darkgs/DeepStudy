@@ -18,6 +18,7 @@ class ModuleGenerator(object):
 	def conv2d(*args, **dict_args):
 		return nn.Sequential(
 			nn.Conv2d(*args, **dict_args),
+			nn.BatchNorm2d(args[1]),
 			nn.ReLU(True),
 		)
 
@@ -25,7 +26,10 @@ class ModuleGenerator(object):
 	def conv2d_reduce(prev_channel, *args, **dict_args):
 		return nn.Sequential(
 			nn.Conv2d(prev_channel, args[0], 1, 1),
+			nn.BatchNorm2d(args[0]),
+			nn.ReLU(True),
 			nn.Conv2d(*args, **dict_args),
+			nn.BatchNorm2d(args[1]),
 			nn.ReLU(True),
 		)
 
@@ -34,14 +38,16 @@ class ModuleGenerator(object):
 		return nn.Sequential(
 			nn.MaxPool2d(3, **dict_args),
 			nn.Conv2d(prev_channel, next_channel, 1, 1),
+			nn.BatchNorm2d(next_channel),
+			nn.ReLU(True),
 		)
 
 	@staticmethod
 	def fc(prev_channel, next_channel):
 		return nn.Sequential(
 			nn.Linear(prev_channel, next_channel),
-			nn.BatchNorm1d(next_channel),
-			nn.ReLU(True),
+#			nn.BatchNorm1d(next_channel),
+#			nn.ReLU(True),
 		)
 
 class Inception(nn.Module):
@@ -54,6 +60,10 @@ class Inception(nn.Module):
 		self.b2 = ModuleGenerator.conv2d_reduce(prev_channel, c_3x3_r, c_3x3, 3, stride=1, padding=1)
 		self.b3 = ModuleGenerator.conv2d_reduce(prev_channel, c_5x5_r, c_5x5, 5, stride=1, padding=2)
 		self.b4 = ModuleGenerator.pool_proj(prev_channel, c_pool, 3, stride=1, padding=1)
+#		self.norm = nn.Sequential(
+#			nn.BatchNorm2d(c_1x1 + c_3x3 + c_5x5 + c_pool),
+#			nn.ReLU(True),
+#		)
 
 	def forward(self, x):
 		out1 = self.b1(x)
@@ -61,6 +71,8 @@ class Inception(nn.Module):
 		out3 = self.b3(x)
 		out4 = self.b4(x)
 		return torch.cat([out1, out2, out3, out4], 1)
+#		out = self.norm(torch.cat([out1, out2, out3, out4], 1))
+#		return out
 
 
 class GoogLeNet(nn.Module):
@@ -203,8 +215,8 @@ def main():
 	model = GoogLeNet().to(device)
 
 	criterion = nn.CrossEntropyLoss()
-#	optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-	optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=5e-4)
+	optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+#	optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=5e-4)
 
 	def test():
 		with torch.no_grad():
@@ -235,8 +247,6 @@ def main():
 			out_1, out_2, out_3 = model(inputs)
 			loss_1 = criterion(out_1, labels) * 0.3
 			loss_2 = criterion(out_2, labels) * 0.3
-#			loss_1 = criterion(out_1, labels)
-#			loss_2 = criterion(out_2, labels)
 			loss_3 = criterion(out_3, labels)
 
 			loss = loss_1 + loss_2 + loss_3
@@ -251,10 +261,13 @@ def main():
 
 
 	start_time = time.time()
-	for epoch in range(20):
+	for epoch in range(1000):
 		epoch_loss = train()
 		acc = test()
 		print('epoch {} : loss({}) acc({}%) time({})'.format(epoch, epoch_loss, acc, time.time()-start_time))
+		log_line = 'epoch {} : loss({}) acc({}%) time({})\n'.format(epoch, epoch_loss, acc, time.time()-start_time)
+		with open('log.txt', 'a') as log_f:
+			log_f.write(log_line)
 
 
 if __name__ == '__main__':

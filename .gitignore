@@ -2,3 +2,4 @@ data/
 tags
 *.pyc
 *.swp
+log.txt
