@@ -25,6 +25,8 @@ Deep learning paper implementation study at the <a href="https://datalab.snu.ac.
 
 ### With BathNormalization on every Conv Layers, BatchNorm after Inception, SGD optimizer Learning rate : 1e-2
 * Epoch 10 => Accuracy 71.99% took 1159 secs(about half hour)
+* Epoch 20 => Accuracy 81.18% took 2213 secs
+* Epoch 139 => Accuracy 89.2% took took 14763 secs
 
 ### With BathNormalization on every Conv Layers, BatchNorm after Inception, SGD optimizer Learning rate : 1e-1
 * Epoch 10 => Accuracy 60.69% took 1116 secs(about half hour)
