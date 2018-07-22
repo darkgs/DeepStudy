@@ -1,5 +1,4 @@
 
-import time
 
 import torch
 import torch.optim as optim
@@ -11,14 +10,6 @@ import torchvision
 import torchvision.transforms as transforms
 
 import numpy as np
-
-from optparse import OptionParser
-
-from google_net import GoogLeNet
-from res_net import ResNet
-
-parser = OptionParser()
-parser.add_option('-m', '--model', dest='model', type='string', default='google_net')
 
 class Cifar10(object):
 	def __init__(self):
@@ -103,89 +94,4 @@ class Cifar10(object):
 			acum_loss += loss.item()
 			count += 1
 		return float(acum_loss) / float(count)
-
-
-class GoogLeNet_Cifar10(Cifar10):
-	def set_model(self):
-		self.model = GoogLeNet().to(self.device)
-
-	def set_criterion(self):
-		self.criterion = nn.CrossEntropyLoss()
-
-	def set_optimizer(self):
-		self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
-#		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
-
-	def set_loss(self, *arg):
-		out_1, out_2, out_3, labels = arg
-		loss_1 = self.criterion(out_1, labels) * 0.3
-		loss_2 = self.criterion(out_2, labels) * 0.3
-		loss_3 = self.criterion(out_3, labels)
-
-		loss = loss_1 + loss_2 + loss_3
-		return loss
-
-	def calc_correct(self, *arg):
-		_, _, out_3, labels = arg
-		_, predicted = torch.max(out_3.data, 1)
-		correct = (predicted == labels).sum().item()
-		return correct
-
-		
-class ResNet_Cifar10(Cifar10):
-	def set_model(self):
-		self.model = ResNet().to(self.device)
-
-	def set_criterion(self):
-		self.criterion = nn.CrossEntropyLoss()
-
-	def set_optimizer(self):
-		self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
-#		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
-
-	def set_loss(self, *arg):
-		out, labels = arg
-		loss = self.criterion(out, labels)
-		return loss
-
-	def calc_correct(self, *arg):
-		out, labels = arg
-		_, predicted = torch.max(out.data, 1)
-		correct = (predicted == labels).sum().item()
-		return correct
-
-
-def main():
-	# Select model
-	valid_models = [
-		('google_net', GoogLeNet_Cifar10),
-		('res_net', ResNet_Cifar10),
-	]
-
-	options, args = parser.parse_args()
-	model_name = options.model
-	c_model = None
-	for t_name, t_model in valid_models:
-		if t_name == model_name:
-			c_model = t_model
-			print('{} model is selected'.format(t_name))
-
-	if c_model == None:
-		print('Invalid Model Name : {}'.format(model_name))
-		return
-
-	cifar10_model = c_model()
-
-	start_time = time.time()
-	for epoch in range(1000):
-		epoch_loss = cifar10_model.train()
-		acc = cifar10_model.test()
-		print('epoch {} : loss({}) acc({}%) time({})'.format(epoch, epoch_loss, acc, time.time()-start_time))
-		log_line = 'epoch {} : loss({}) acc({}%) time({})\n'.format(epoch, epoch_loss, acc, time.time()-start_time)
-		with open('log.txt', 'a') as log_f:
-			log_f.write(log_line)
-
-
-if __name__ == '__main__':
-	main()
 

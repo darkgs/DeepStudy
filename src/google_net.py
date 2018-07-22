@@ -2,6 +2,8 @@
 import torch
 import torch.nn as nn
 
+from cifar10 import Cifar10
+
 class ModuleGenerator(object):
 	@staticmethod
 	def conv2d(*args, **dict_args):
@@ -167,4 +169,32 @@ class GoogLeNet(nn.Module):
 		out_3 = self.classifier_rt(out_3)
 
 		return out_1, out_2, out_3
+
+
+class GoogLeNet_Cifar10(Cifar10):
+	def set_model(self):
+		self.model = GoogLeNet().to(self.device)
+
+	def set_criterion(self):
+		self.criterion = nn.CrossEntropyLoss()
+
+	def set_optimizer(self):
+		self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
+#		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
+
+	def set_loss(self, *arg):
+		out_1, out_2, out_3, labels = arg
+		loss_1 = self.criterion(out_1, labels) * 0.3
+		loss_2 = self.criterion(out_2, labels) * 0.3
+		loss_3 = self.criterion(out_3, labels)
+
+		loss = loss_1 + loss_2 + loss_3
+		return loss
+
+	def calc_correct(self, *arg):
+		_, _, out_3, labels = arg
+		_, predicted = torch.max(out_3.data, 1)
+		correct = (predicted == labels).sum().item()
+		return correct
+
 
