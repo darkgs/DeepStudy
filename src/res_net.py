@@ -9,9 +9,9 @@ from cifar10 import Cifar10
 
 class ModuleGenerator(object):
 	@staticmethod
-	def conv2d(*args, **dict_args):
+	def conv2d(*args, **kwargs):
 		return nn.Sequential(
-			nn.Conv2d(*args, **dict_args),
+			nn.Conv2d(*args, **kwargs),
 			nn.BatchNorm2d(args[1]),
 		)
 
