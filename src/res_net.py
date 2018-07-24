@@ -82,23 +82,28 @@ class ResNet(nn.Module):
 			ResidualLayers(16, 16, layer_count=n),						# output_size : 32x32x16
 			ResidualLayers(16, 32, layer_count=n, half_map_size=True),	# output_size : 16x16x32
 			ResidualLayers(32, 64, layer_count=n, half_map_size=True),  # output_size : 8x8x64
-			nn.AvgPool2d(3, stride=1, padding=1), 						# output_size : 8x8x64
+			nn.AvgPool2d(8, stride=1), 									# output_size : 1x1x64
 		)
 
 		# 10-way fully-connected layer, and softmax
-		fc_layers = []
-		dim = 8*8*64
-		for _ in range(9):
-			fc_layers.append(nn.Linear(dim, int(dim/2)))
-			dim /= 2
-		fc_layers.append(nn.Linear(dim, 10))
-		fc_layers.append(nn.Softmax(dim=1))
+#		fc_layers = []
+#		dim = 8*8*64
+#		for _ in range(9):
+#			fc_layers.append(nn.Linear(dim, int(dim/2)))
+#			dim /= 2
+#		fc_layers.append(nn.Linear(dim, 10))
+#		fc_layers.append(nn.Softmax(dim=1))
 
-		self.fc = nn.Sequential(*fc_layers)
+#		self.fc = nn.Sequential(*fc_layers)
+
+		self.fc = nn.Sequential(
+			nn.Linear(64, 10),
+			nn.Softmax(dim=1),
+		)
 
 	def forward(self, x):
 		out = self.layers(x)
-		out = out.view(-1, 8*8*64)
+		out = out.view(-1, 1*1*64)
 		out = self.fc(out)
 		return (out, )
 
@@ -110,6 +115,7 @@ class ResNet_Cifar10(Cifar10):
 
 	def set_learning_rate(self, lr=0.01):
 		self.lr = lr
+#		self.set_optimizer()
 
 	def set_model(self):
 		self.model = ResNet().to(self.device)
@@ -118,8 +124,9 @@ class ResNet_Cifar10(Cifar10):
 		self.criterion = nn.CrossEntropyLoss()
 
 	def set_optimizer(self):
-		self.optimizer = optim.SGD(self.model.parameters(), lr=self.lr, momentum=0.9)
-#		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
+#		self.optimizer = optim.SGD(self.model.parameters(), lr=self.lr, momentum=0.9)
+#		self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
+		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
 
 	def set_loss(self, *arg):
 		out, labels = arg
