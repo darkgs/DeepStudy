@@ -54,5 +54,10 @@ Deep learning paper implementation study at the <a href="https://datalab.snu.ac.
 * Epoch 300 => Accuracy 89.11% took 13368 secs(about 4 hours)
 * Epoch 500 => Accuracy 90.4% took 22249 secs(about 6 hours)
 
+#### SGD (lr:1e-1, momentum:0.9)
+* Epoch 10 => Accuracy 51.11% took 489 secs(about 8 mins)
+* Epoch 50 => Accuracy 78.48% took 2271 secs(about 40 mins)
+* Epoch 300 => Accuracy 89.53% took 13405 secs(about 4 hours)
+
 </p>
 </details>
