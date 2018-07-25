@@ -125,8 +125,8 @@ class ResNet_Cifar10(Cifar10):
 
 	def set_optimizer(self):
 #		self.optimizer = optim.SGD(self.model.parameters(), lr=self.lr, momentum=0.9)
-#		self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
-		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
+		self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
+#		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
 
 	def set_loss(self, *arg):
 		out, labels = arg

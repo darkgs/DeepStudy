@@ -2,6 +2,8 @@
 Deep learning paper implementation study at the <a href="https://datalab.snu.ac.kr/">DataMining Lab</a> in the <a href="http://www.snu.ac.kr">Seoul National University</a>.
 
 # GoogLeNet
+<details><summary>Click to show results</summary>
+<p>
 ## Hyper Parameters
 * Loss = CrossEntropyLoss
 * Adam Optimizer = learning rate : 1e-3, weight_decay : 5e-4
@@ -30,3 +32,5 @@ Deep learning paper implementation study at the <a href="https://datalab.snu.ac.
 
 ### With BathNormalization on every Conv Layers, BatchNorm after Inception, SGD optimizer Learning rate : 1e-1
 * Epoch 10 => Accuracy 60.69% took 1116 secs(about half hour)
+</p>
+</details>
