@@ -18,21 +18,41 @@ Deep learning paper implementation study at the <a href="https://datalab.snu.ac.
 * Epoch 300 => Accuracy 79.65% took 28728 secs(about 8 hour)
 * ~ Epoch 900 => Accuracy 78~81%
 
-### With BathNormalization on every Conv Layers, Learning rate : 1e-3
+#### With BathNormalization on every Conv Layers, Learning rate : 1e-3
 * Epoch 10 => Accuracy 61.45% took 1149 secs(about half hour)
 
-### With BathNormalization on every Conv Layers, SGD optimizer Learning rate : 1e-2
+#### With BathNormalization on every Conv Layers, SGD optimizer Learning rate : 1e-2
 * Epoch 10 => Accuracy 72.3% took 1159 secs(about half hour)
 * Epoch 20 => Accuracy 81.18% took 2213 secs
 * Epoch 139 => Accuracy 89.2% took took 14763 secs
 
-### With BathNormalization on every Conv Layers, SGD optimizer Learning rate : 1e-1
+#### With BathNormalization on every Conv Layers, SGD optimizer Learning rate : 1e-1
 * Epoch 10 => Accuracy 56.2% took 1155 secs(about half hour)
 
-### With BathNormalization on every Conv Layers, BatchNorm after Inception, SGD optimizer Learning rate : 1e-2
+#### With BathNormalization on every Conv Layers, BatchNorm after Inception, SGD optimizer Learning rate : 1e-2
 * Epoch 10 => Accuracy 71.99% took 1159 secs(about half hour)
 
-### With BathNormalization on every Conv Layers, BatchNorm after Inception, SGD optimizer Learning rate : 1e-1
+#### With BathNormalization on every Conv Layers, BatchNorm after Inception, SGD optimizer Learning rate : 1e-1
 * Epoch 10 => Accuracy 60.69% took 1116 secs(about half hour)
+</p>
+</details>
+
+## ResNet
+<details><summary>Click to show results</summary>
+<p>
+
+### Hyper Parameters
+* Loss = CrossEntropyLoss
+* SGD Optimizer = learning rate : 1e-2, momentum : 0.9
+
+### Experiments
+* Dataset = CIFAR10
+
+#### SGD (lr:1e-2, momentum:0.9)
+* Epoch 10 => Accuracy 60.03% took 532 secs(about 9 mins)
+* Epoch 50 => Accuracy 80.46% took 2220 secs(about 40 mins)
+* Epoch 300 => Accuracy 89.11% took 13368 secs(about 4 hours)
+* Epoch 500 => Accuracy 90.4% took 22249 secs(about 6 hours)
+
 </p>
 </details>
