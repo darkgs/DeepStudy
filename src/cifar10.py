@@ -2,6 +2,7 @@
 
 import torch
 import torch.optim as optim
+from torch.optim.lr_scheduler import LambdaLR
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -78,6 +79,10 @@ class Cifar10(object):
 		self.model.train()
 		acum_loss = 0.0
 		count = 0
+
+#		for param_group in self.optimizer.param_groups:
+#			print(param_group['lr'])
+
 		for i, data in enumerate(self.trainloader, 0):
 			inputs, labels = data[0].to(self.device), data[1].to(self.device)
 
@@ -94,4 +99,7 @@ class Cifar10(object):
 			acum_loss += loss.item()
 			count += 1
 		return float(acum_loss) / float(count)
+
+	def update_lr(self, epoch=-1, test_acc=-1):
+		return
 

@@ -110,12 +110,7 @@ class ResNet(nn.Module):
 
 class ResNet_Cifar10(Cifar10):
 	def __init__(self):
-		self.lr = 0.01
 		super(ResNet_Cifar10, self).__init__()
-
-	def set_learning_rate(self, lr=0.01):
-		self.lr = lr
-#		self.set_optimizer()
 
 	def set_model(self):
 		self.model = ResNet().to(self.device)
@@ -124,7 +119,6 @@ class ResNet_Cifar10(Cifar10):
 		self.criterion = nn.CrossEntropyLoss()
 
 	def set_optimizer(self):
-#		self.optimizer = optim.SGD(self.model.parameters(), lr=self.lr, momentum=0.9)
 		self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
 #		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
 
@@ -133,9 +127,36 @@ class ResNet_Cifar10(Cifar10):
 		loss = self.criterion(out, labels)
 		return loss
 
+
 	def calc_correct(self, *arg):
 		out, labels = arg
 		_, predicted = torch.max(out.data, 1)
 		correct = (predicted == labels).sum().item()
 		return correct
+
+
+	def update_lr(self, epoch=-1, test_acc=-1):
+		if epoch < 0 or test_acc < 0:
+			return
+
+		prev_lr = None
+
+		for param_group in self.optimizer.param_groups:
+			if prev_lr == None:
+				prev_lr = param_group['lr']
+				continue
+
+			if prev_lr != param_group['lr']:
+				print('I donot think about it yet : diff lr in param groups')
+				return
+
+		if prev_lr == 0.1:
+			return
+
+		new_lr = 0.1 if test_acc > 80.0 else 0.01
+
+		if new_lr != prev_lr:
+			print('lr change {} => {}'.format(prev_lr, new_lr))
+			for param_group in self.optimizer.param_groups:
+				param_group['lr'] = new_lr
 

@@ -33,15 +33,11 @@ def main():
 
 	start_time = time.time()
 
-	lr_changed = False
 	for epoch in range(1000):
 		epoch_loss = cifar10_model.train()
 		acc = cifar10_model.test()
 
-		if (model_name == 'res_net') and \
-					   (not lr_changed) and (acc > 80.0):
-			cifar10_model.set_learning_rate(lr=0.1)
-			lr_changed = True
+		cifar10_model.update_lr(epoch=epoch, test_acc=acc)
 
 		print('epoch {} : loss({}) acc({}%) time({})'.format(epoch, epoch_loss, acc, time.time()-start_time))
 		log_line = 'epoch {} : loss({}) acc({}%) time({})\n'.format(epoch, epoch_loss, acc, time.time()-start_time)
