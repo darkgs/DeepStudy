@@ -4,6 +4,7 @@ Deep learning paper implementation study at the <a href="https://datalab.snu.ac.
 # GoogLeNet
 <details><summary>Click to show results</summary>
 <p>
+
 ## Hyper Parameters
 * Loss = CrossEntropyLoss
 * Adam Optimizer = learning rate : 1e-3, weight_decay : 5e-4
