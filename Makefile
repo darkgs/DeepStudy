@@ -1,5 +1,5 @@
 
-all: res_net
+all: show_and_tell
 
 .PHONY: simple_cnn google_net res_net run
 
@@ -12,3 +12,5 @@ google_net:
 res_net:
 	@python3 src/main.py -m res_net
 
+show_and_tell:
+	@python3 src/mscoco.py
