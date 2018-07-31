@@ -57,7 +57,7 @@ class CocoVoca(object):
 
 		return self.idx2word.get(idx, '<unknown>')
 
-	def get_counts(self):
+	def __len__(self):
 		return len(self.word2idx)
 
 
