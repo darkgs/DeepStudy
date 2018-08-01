@@ -4,6 +4,7 @@ import nltk
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 import torchvision.models as models
 
@@ -50,7 +51,9 @@ class DecoderRNN(nn.Module):
 		self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
 		self.linear = nn.Linear(hidden_size, vocab_size)
 
-		self.attn = nn.Linear(hidden_size, hidden_size)
+		self.attn = nn.Linear(hidden_size+embed_size, hidden_size)
+		self.attn_combine = nn.Linear(embed_size+49, embed_size)
+
 		self.init_weights()
 
 	def init_weights(self):
@@ -63,37 +66,22 @@ class DecoderRNN(nn.Module):
 						torch.div(torch.sum(features, 1).unsqueeze(0), features.size(1)))
 
 		embeddings = self.embed(captions)
+		# Attention
+		with torch.no_grad():
+			rnn_output, _ = self.lstm(embeddings, rnn_hidden)
+
+		attn_weights = F.softmax(self.attn(torch.cat((rnn_output, embeddings), dim=2)), dim=1)	# batch * max_seq * hidden_size
+		attn_applied = attn_weights.bmm(torch.transpose(features, 2, 1))	# batch * max_seq * L
+		
+		embeddings = self.attn_combine(torch.cat((embeddings, attn_applied), dim=2))
+
+		# LSTM fed
 		packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
-		packed_rnn_output, rnn_hidden = self.lstm(packed, rnn_hidden)
+		packed_rnn_output, _ = self.lstm(packed, rnn_hidden)
 
 		rnn_output = self.linear(packed_rnn_output[0])
 
 		return rnn_output
-
-		# Attention
-		def get_att_weight(hidden, encoder_hiddens):
-			seq_len = len(encoder_hiddens)
-
-			attn_scores = torch.zeros(seq_len).to(self.device)
-
-			def get_att_score(encoder_hidden):
-				score = self.attn(encoder_hidden)
-				return torch.dot(hidden.view(-1), score.view(-1))
-
-			for i in range(seq_len):
-				attn_scores[i] = get_att_score(encoder_hiddens[i])
-
-			return nn.softmax(attn_scores).view(1, 1, -1)
-
-
-		attn_weights = get_att_weight(rnn_output.squeeze(0), features)
-		context = attn_weights.bmm(features.transpose(0,1))
-
-		rnn_output = rnn_output.squeeze(0)
-		context = context.squeeze(1)
-		output = self.out(torch.cat((rnn_output, context), 1))
-
-		return outputs
 
 
 	def sample(self, start_input, features, states=None):
@@ -154,7 +142,7 @@ class CocoCap(object):
 
 		self.criterion = nn.CrossEntropyLoss()
 #		params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters()) + list(self.encoder.bn.parameters())
-		params = list(self.decoder.parameters())
+		params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters())
 		self.optimizer = torch.optim.Adam(params, lr=1e-3)
 
 
@@ -196,8 +184,6 @@ class CocoCap(object):
 		self.decoder.train()
 		self.encoder.train()
 
-		start_time = time.time()
-
 		def repackage_hidden(h):
 			if h is None:
 				return None
@@ -224,10 +210,8 @@ class CocoCap(object):
 			loss.backward()
 			self.optimizer.step()
 
-			if i > (total_count / 10):
-				break
-
-		print('train a dataset took {} secs'.format(time.time() - start_time))
+#			if i > (total_count / 10):
+#				break
 
 
 	def test(self):
@@ -236,10 +220,8 @@ class CocoCap(object):
 			self.decoder.eval()
 			self.encoder.eval()
 
-			total_count = len(self.data_loader['train'])
-			for i, data in enumerate(self.data_loader['train'], 0):
-				if i < (total_count / 10):
-					continue
+			total_count = len(self.data_loader['valid'])
+			for i, data in enumerate(self.data_loader['valid'], 0):
 
 				images, captions, lengths = data[0].to(self.device), data[1].to(self.device), data[2]
 				start_input = torch.LongTensor([self.voca.get_idx_from_word('<start>')]*64).to(self.device)
@@ -260,7 +242,12 @@ class CocoCap(object):
 def main():
 	resnet = models.resnet152(pretrained=True)
 	coco_data = CocoCap(max_cap_len=70)
-	coco_data.train()
+	for epoch in range(1):
+		epoch_start_time = time.time()	
+		print('epoch {} : start trainning'.format(epoch))
+		coco_data.train()
+		print('epoch {} : train tooks {}'.format(epoch, time.time() - epoch_start_time))
+
 	coco_data.test()
 
 
