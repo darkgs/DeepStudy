@@ -1,4 +1,7 @@
 
+import time
+import nltk
+
 import torch
 import torch.nn as nn
 
@@ -7,6 +10,7 @@ import torchvision.models as models
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 
+from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence
 
 from mscoco_voca import CocoVoca
@@ -16,59 +20,110 @@ class EncoderCNN(nn.Module):
 		"""Load the pretrained ResNet-152 and replace top fc layer."""
 		super(EncoderCNN, self).__init__()
 		resnet = models.resnet152(pretrained=True)
-		modules = list(resnet.children())[:-1]      # delete the last fc layer.
+		modules = list(resnet.children())[:-2]      # delete the last 7x7 max_pool layer
 		self.resnet = nn.Sequential(*modules)
 		self.linear = nn.Linear(resnet.fc.in_features, embed_size)
-		self.bn = nn.BatchNorm1d(embed_size, momentum=0.01)
+#		self.bn = nn.BatchNorm1d(embed_size, momentum=0.01)
 
 		
 	def forward(self, images):
 		"""Extract feature vectors from input images."""
 		with torch.no_grad():
 			features = self.resnet(images)
-		features = features.reshape(features.size(0), -1)
-		features = self.bn(self.linear(features))
+		features = torch.transpose(features, 1, 3)
+		features = features.reshape(features.size(0), -1, features.size(3))
+#		features = self.bn(self.linear(features))
+		features = self.linear(features)
 		return features
 
 
 class DecoderRNN(nn.Module):
-	def __init__(self, embed_size, hidden_size, vocab_size, num_layers, max_seq_length=20):
+	def __init__(self, embed_size, hidden_size, vocab_size, num_layers):
 		"""Set the hyper-parameters and build the layers."""
 		super(DecoderRNN, self).__init__()
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+		self.num_layers = num_layers
+		self.hidden_size = hidden_size
+
 		self.embed = nn.Embedding(vocab_size, embed_size)
 		self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
 		self.linear = nn.Linear(hidden_size, vocab_size)
-		self.max_seg_length = max_seq_length
 
+		self.attn = nn.Linear(hidden_size, hidden_size)
+		self.init_weights()
+
+	def init_weights(self):
+		self.embed.weight.data.uniform_(-0.1, 0.1)
+		self.linear.weight.data.uniform_(-0.1, 0.1)
+		self.linear.bias.data.fill_(0)
 
 	def forward(self, features, captions, lengths):
-		"""Decode image feature vectors and generates captions."""
+		rnn_hidden = (torch.div(torch.sum(features, 1).unsqueeze(0), features.size(1)),
+						torch.div(torch.sum(features, 1).unsqueeze(0), features.size(1)))
+
 		embeddings = self.embed(captions)
-		embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
 		packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
-		hiddens, _ = self.lstm(packed)
-		outputs = self.linear(hiddens[0])
+		packed_rnn_output, rnn_hidden = self.lstm(packed, rnn_hidden)
+
+		rnn_output = self.linear(packed_rnn_output[0])
+
+		return rnn_output
+
+		# Attention
+		def get_att_weight(hidden, encoder_hiddens):
+			seq_len = len(encoder_hiddens)
+
+			attn_scores = torch.zeros(seq_len).to(self.device)
+
+			def get_att_score(encoder_hidden):
+				score = self.attn(encoder_hidden)
+				return torch.dot(hidden.view(-1), score.view(-1))
+
+			for i in range(seq_len):
+				attn_scores[i] = get_att_score(encoder_hiddens[i])
+
+			return nn.softmax(attn_scores).view(1, 1, -1)
+
+
+		attn_weights = get_att_weight(rnn_output.squeeze(0), features)
+		context = attn_weights.bmm(features.transpose(0,1))
+
+		rnn_output = rnn_output.squeeze(0)
+		context = context.squeeze(1)
+		output = self.out(torch.cat((rnn_output, context), 1))
+
 		return outputs
 
 
-	def sample(self, features, states=None):
+	def sample(self, start_input, features, states=None):
 		"""Generate captions for given image features using greedy search."""
 		sampled_ids = []
-		inputs = features.unsqueeze(1)
-		for i in range(self.max_seg_length):
-			hiddens, states = self.lstm(inputs, states)          # hiddens: (batch_size, 1, hidden_size)
-			outputs = self.linear(hiddens.squeeze(1))            # outputs:  (batch_size, vocab_size)
-			_, predicted = outputs.max(1)                        # predicted: (batch_size)
+		embeddings = self.embed(start_input).unsqueeze(1)
+
+		rnn_hidden = (torch.div(torch.sum(features, 1).unsqueeze(0), features.size(1)),
+						torch.div(torch.sum(features, 1).unsqueeze(0), features.size(1)))
+
+		for i in range(20):
+			outputs, rnn_hidden = self.lstm(embeddings, rnn_hidden)		# outputs: (batch_size, 1, hidden_size)
+			outputs = self.linear(outputs.squeeze(1))					# outputs:  (batch_size, vocab_size)
+			_, predicted = outputs.max(1)								# predicted: (batch_size)
 			sampled_ids.append(predicted)
-			inputs = self.embed(predicted)                       # inputs: (batch_size, embed_size)
-			inputs = inputs.unsqueeze(1)                         # inputs: (batch_size, 1, embed_size)
-		sampled_ids = torch.stack(sampled_ids, 1)                # sampled_ids: (batch_size, max_seq_length)
+			inputs = self.embed(predicted)						# inputs: (batch_size, embed_size)
+			inputs = inputs.unsqueeze(1)						# inputs: (batch_size, 1, embed_size)
+		sampled_ids = torch.stack(sampled_ids, 1)				# sampled_ids: (batch_size, max_seq_length)
 		return sampled_ids
 
 
 class CocoCap(object):
 
 	def __init__(self, max_cap_len=50):
+
+		batch_size = 64
+		embed_size = 1024
+		hidden_size = 1024
+		num_layers = 1
+
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 		self.voca = CocoVoca()
@@ -76,8 +131,8 @@ class CocoCap(object):
 
 		scale_transform = transforms.Compose([
 #			transforms.ToPILImage(),
-			transforms.Resize(256),
-			transforms.RandomCrop(224),
+			transforms.Resize((224,224)),
+#			transforms.RandomCrop(224),
 			transforms.ToTensor(),
 		])
 
@@ -88,19 +143,18 @@ class CocoCap(object):
 					transform=scale_transform)
 
 			self.data_loader[data_type] = torch.utils.data.DataLoader(dataset=coco_dataset,
-					batch_size=128,
-					shuffle=True,
+					batch_size=batch_size,
+#					shuffle=True,
+					shuffle=False,
 					num_workers=4,
 					collate_fn=self.collate_fn)
 
-		embed_size = 2048
-		hidden_size = 1024
-		num_layers = 3
 		self.encoder = EncoderCNN(embed_size).to(self.device)
 		self.decoder = DecoderRNN(embed_size, hidden_size, len(self.voca), num_layers).to(self.device)
 
 		self.criterion = nn.CrossEntropyLoss()
-		params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters()) + list(self.encoder.bn.parameters())
+#		params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters()) + list(self.encoder.bn.parameters())
+		params = list(self.decoder.parameters())
 		self.optimizer = torch.optim.Adam(params, lr=1e-3)
 
 
@@ -138,14 +192,28 @@ class CocoCap(object):
 		return images, targets, lengths
 
 
-	def train(self):
+	def train(self, decoder_hidden=None):
+		self.decoder.train()
+		self.encoder.train()
+
+		start_time = time.time()
+
+		def repackage_hidden(h):
+			if h is None:
+				return None
+			if isinstance(h, torch.Tensor):
+				return h.detach()
+			else:
+				return tuple(repackage_hidden(v) for v in h)
+
+		total_count = len(self.data_loader['train'])
 		for i, data in enumerate(self.data_loader['train'], 0):
 			images, captions, lengths = data[0].to(self.device), data[1].to(self.device), data[2]
 
 			targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
-
 			features = self.encoder(images)
+
 			outputs = self.decoder(features, captions, lengths)
 
 			loss = self.criterion(outputs, targets)
@@ -156,10 +224,44 @@ class CocoCap(object):
 			loss.backward()
 			self.optimizer.step()
 
+			if i > (total_count / 10):
+				break
+
+		print('train a dataset took {} secs'.format(time.time() - start_time))
+
+
+	def test(self):
+
+		with torch.no_grad():
+			self.decoder.eval()
+			self.encoder.eval()
+
+			total_count = len(self.data_loader['train'])
+			for i, data in enumerate(self.data_loader['train'], 0):
+				if i < (total_count / 10):
+					continue
+
+				images, captions, lengths = data[0].to(self.device), data[1].to(self.device), data[2]
+				start_input = torch.LongTensor([self.voca.get_idx_from_word('<start>')]*64).to(self.device)
+				start_input.reshape(64,1,1)
+
+				feature = self.encoder(images)
+				sampled_ids = self.decoder.sample(start_input, feature)
+
+				sampled_ids = sampled_ids[1].cpu().numpy()
+				
+				generated_caption = [
+					self.voca.get_word_from_idx(idx) for idx in sampled_ids if idx not in []
+				]
+				print(' '.join(generated_caption))
+				break
+
 
 def main():
+	resnet = models.resnet152(pretrained=True)
 	coco_data = CocoCap(max_cap_len=70)
 	coco_data.train()
+	coco_data.test()
 
 
 if __name__ == '__main__':
