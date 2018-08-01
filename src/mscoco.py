@@ -1,6 +1,10 @@
 
+import os
+
 import time
 import nltk
+
+import random
 
 import torch
 import torch.nn as nn
@@ -149,7 +153,10 @@ class CocoCap(object):
 	def collate_fn(self, data):
 		max_len = self.max_cap_len
 
-		data.sort(key=lambda x: len(x[1][0]), reverse=True)
+		# Take a one caption for each image
+		data = [(image, captions[random.randrange(0, len(captions))]) for image, captions in data]
+
+		data.sort(key=lambda x: len(x[1]), reverse=True)
 		images, captions = zip(*data)
 
 		def caption_to_idx_vector(caption):
@@ -169,11 +176,10 @@ class CocoCap(object):
 		# Merge images (from tuple of 3D tensor to 4D tensor)
 		images = torch.stack(images, 0)
 
-		# TODO - only using first caption
-		lengths = [min(len(cap[0]), max_len) for cap in captions]
+		lengths = [min(len(cap), max_len) for i, cap in enumerate(captions)]
 	
 		targets = torch.LongTensor(
-			[caption_to_idx_vector(cap[0]) for cap in captions]
+			[caption_to_idx_vector(cap) for i, cap in enumerate(captions)]
 		)
 	
 
@@ -210,9 +216,6 @@ class CocoCap(object):
 			loss.backward()
 			self.optimizer.step()
 
-#			if i > (total_count / 10):
-#				break
-
 
 	def test(self):
 
@@ -220,8 +223,8 @@ class CocoCap(object):
 			self.decoder.eval()
 			self.encoder.eval()
 
-			total_count = len(self.data_loader['valid'])
-			for i, data in enumerate(self.data_loader['valid'], 0):
+			total_count = len(self.data_loader['val'])
+			for i, data in enumerate(self.data_loader['val'], 0):
 
 				images, captions, lengths = data[0].to(self.device), data[1].to(self.device), data[2]
 				start_input = torch.LongTensor([self.voca.get_idx_from_word('<start>')]*64).to(self.device)
@@ -238,15 +241,54 @@ class CocoCap(object):
 				print(' '.join(generated_caption))
 				break
 
+	def save(self, epoch=0):
+		save_dir_path = 'model/show_and_tell'
+
+		states = {
+			'epoch': epoch,
+			'encoder': self.encoder.state_dict(),
+			'decoder': self.decoder.state_dict(),
+			'optimizer': self.optimizer.state_dict(),
+		}
+
+		if not os.path.exists(save_dir_path):
+			os.system('mkdir -p {}'.format(save_dir_path))
+
+		torch.save(
+			states,
+			'{}/show_and_tell.pth.tar'.format(save_dir_path),
+		)
+		torch.save(
+			states,
+			'{}/show_and_tell-{}.pth.tar'.format(save_dir_path, epoch),
+		)
+
+	def load(self):
+		model_path = 'model/show_and_tell/show_and_tell.pth.tar'
+
+		if not os.path.exists(model_path):
+			return -1
+
+		states = torch.load(model_path)
+
+		self.encoder.load_state_dict(states['encoder'])
+		self.decoder.load_state_dict(states['decoder'])
+		self.optimizer.load_state_dict(states['optimizer'])
+
+		return states['epoch']
+
 
 def main():
 	resnet = models.resnet152(pretrained=True)
 	coco_data = CocoCap(max_cap_len=70)
-	for epoch in range(1):
+
+	start_epoch = coco_data.load() + 1
+	for epoch in range(start_epoch, 10):
 		epoch_start_time = time.time()	
 		print('epoch {} : start trainning'.format(epoch))
 		coco_data.train()
 		print('epoch {} : train tooks {}'.format(epoch, time.time() - epoch_start_time))
+		coco_data.save(epoch)
 
 	coco_data.test()
 

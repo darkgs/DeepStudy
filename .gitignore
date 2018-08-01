@@ -3,3 +3,4 @@ tags
 *.pyc
 *.swp
 log.txt
+model/
