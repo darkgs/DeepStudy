@@ -21,13 +21,13 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from mscoco_voca import CocoVoca
 
 class EncoderCNN(nn.Module):
-	def __init__(self, embed_size):
+	def __init__(self, hidden_size):
 		"""Load the pretrained ResNet-152 and replace top fc layer."""
 		super(EncoderCNN, self).__init__()
 		resnet = models.resnet152(pretrained=True)
 		modules = list(resnet.children())[:-2]      # delete the last 7x7 max_pool layer
 		self.resnet = nn.Sequential(*modules)
-		self.linear = nn.Linear(resnet.fc.in_features, embed_size)
+		self.linear = nn.Linear(resnet.fc.in_features, hidden_size)
 #		self.bn = nn.BatchNorm1d(embed_size, momentum=0.01)
 
 		
@@ -96,7 +96,7 @@ class DecoderRNN(nn.Module):
 		rnn_hidden = (torch.div(torch.sum(features, 1).unsqueeze(0), features.size(1)),
 						torch.div(torch.sum(features, 1).unsqueeze(0), features.size(1)))
 
-		for i in range(20):
+		for i in range(80):
 			outputs, rnn_hidden = self.lstm(embeddings, rnn_hidden)		# outputs: (batch_size, 1, hidden_size)
 			outputs = self.linear(outputs.squeeze(1))					# outputs:  (batch_size, vocab_size)
 			_, predicted = outputs.max(1)								# predicted: (batch_size)
@@ -109,11 +109,11 @@ class DecoderRNN(nn.Module):
 
 class CocoCap(object):
 
-	def __init__(self, max_cap_len=50):
+	def __init__(self, max_cap_len=80):
 
-		batch_size = 64
-		embed_size = 1024
-		hidden_size = 1024
+		batch_size = 16
+		embed_size = 2048
+		hidden_size = 2048
 		num_layers = 1
 
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -141,7 +141,7 @@ class CocoCap(object):
 					num_workers=4,
 					collate_fn=self.collate_fn)
 
-		self.encoder = EncoderCNN(embed_size).to(self.device)
+		self.encoder = EncoderCNN(hidden_size).to(self.device)
 		self.decoder = DecoderRNN(embed_size, hidden_size, len(self.voca), num_layers).to(self.device)
 
 		self.criterion = nn.CrossEntropyLoss()
@@ -283,7 +283,7 @@ def main():
 	coco_data = CocoCap(max_cap_len=70)
 
 	start_epoch = coco_data.load() + 1
-	for epoch in range(start_epoch, 10):
+	for epoch in range(start_epoch, 1):
 		epoch_start_time = time.time()	
 		print('epoch {} : start trainning'.format(epoch))
 		coco_data.train()
