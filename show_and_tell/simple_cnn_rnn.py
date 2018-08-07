@@ -6,8 +6,13 @@ import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 
 class EncoderCNN(nn.Module):
-	def __init__(self, embed_size):
+	def __init__(self, params):
 		super(EncoderCNN, self).__init__()
+
+		self._params = params
+
+		embed_size = self._params['embed_size']
+
 		resnet = models.resnet152(pretrained=True)
 		modules = list(resnet.children())[:-1]      # delete the last fc layer.
 		self.resnet = nn.Sequential(*modules)
@@ -17,17 +22,24 @@ class EncoderCNN(nn.Module):
 	def forward(self, images):
 		with torch.no_grad():
 			features = self.resnet(images)
-			features = features.reshape(features.size(0), -1)
+			batch_size = features.size(0)
+
+			features = features.reshape(batch_size, -1)
 			features = self.bn(self.linear(features))
 		return features
 
 class DecoderRNN(nn.Module):
-	def __init__(self, embed_size, hidden_size, vocab_size, num_layers, max_seq_length=20):
+	def __init__(self, params, vocab_size):
 		super(DecoderRNN, self).__init__()
+
+		embed_size = params['embed_size']
+		hidden_size = params['rnn_hidden_size']
+		num_layers = params['rnn_num_layers']
+		self._max_seq_length = params['cap_max_len']
+
 		self.embed = nn.Embedding(vocab_size, embed_size)
 		self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
 		self.linear = nn.Linear(hidden_size, vocab_size)
-		self.max_seg_length = max_seq_length
 
 	def forward(self, features, captions, lengths):
 		embeddings = self.embed(captions)
@@ -40,15 +52,20 @@ class DecoderRNN(nn.Module):
 	def sample(self, start_input, features, states=None):
 		sampled_ids = []
 		inputs = features.unsqueeze(1)
-		for i in range(self.max_seg_length):
+		for i in range(self._max_seq_length):
 			# hiddens: (batch_size, 1, hidden_size)
 			hiddens, states = self.lstm(inputs, states)
 			# outputs:  (batch_size, vocab_size)
 			outputs = self.linear(hiddens.squeeze(1))
-			_, predicted = outputs.max(1)                        # predicted: (batch_size)
+			# predicted: (batch_size)
+			_, predicted = outputs.max(1)
 			sampled_ids.append(predicted)
-			inputs = self.embed(predicted)                       # inputs: (batch_size, embed_size)
-			inputs = inputs.unsqueeze(1)                         # inputs: (batch_size, 1, embed_size)
-		sampled_ids = torch.stack(sampled_ids, 1)                # sampled_ids: (batch_size, max_seq_length)
+			# inputs: (batch_size, embed_size)
+			inputs = self.embed(predicted)
+			# inputs: (batch_size, 1, embed_size)
+			inputs = inputs.unsqueeze(1)
+
+		# sampled_ids: (batch_size, max_seq_length)
+		sampled_ids = torch.stack(sampled_ids, 1)
 		return sampled_ids
 

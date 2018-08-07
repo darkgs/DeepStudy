@@ -1,9 +1,7 @@
 
 
 import os
-
 import time
-
 import random
 
 import torch
@@ -23,24 +21,33 @@ from simple_cnn_rnn import DecoderRNN
 
 from mscoco_voca import CocoVoca
 
+params = {
+	'batch_size': 64,
+	'embed_size': 1024,
+	'rnn_hidden_size': 2048,
+	'rnn_num_layers': 1,
+	'cap_max_len': 70,
+	'device': torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
+}
+
 class CocoCap(object):
 
-	def __init__(self, max_cap_len=70):
+	def __init__(self, params):
 
-		batch_size = 64
-		embed_size = 1024
-		hidden_size = 1024
-		num_layers = 1
-
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+		batch_size = params['batch_size']
+		embed_size = params['embed_size']
+		rnn_hidden_size = params['rnn_hidden_size']
+		num_layers = params['rnn_num_layers']
+		self._cap_max_len = params['cap_max_len']
 
 		self.voca = CocoVoca()
-		self.max_cap_len = max_cap_len
+
+		self.device = params['device']
 
 		scale_transform = transforms.Compose([
 #			transforms.ToPILImage(),
 			transforms.Resize((224,224)),
-			transforms.RandomCrop(224),
+#			transforms.RandomCrop(224),
 			transforms.ToTensor(),
 		])
 
@@ -57,17 +64,17 @@ class CocoCap(object):
 					num_workers=4,
 					collate_fn=self.collate_fn)
 
-		self.encoder = EncoderCNN(hidden_size).to(self.device)
-		self.decoder = DecoderRNN(embed_size, hidden_size, len(self.voca), num_layers).to(self.device)
+		self.encoder = EncoderCNN(params).to(self.device)
+		self.decoder = DecoderRNN(params, len(self.voca)).to(self.device)
 
 		self.criterion = nn.CrossEntropyLoss()
 #		params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters()) + list(self.encoder.bn.parameters())
-		params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters())
-		self.optimizer = torch.optim.Adam(params, lr=1e-3)
+		optim_params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters())
+		self.optimizer = torch.optim.Adam(optim_params, lr=1e-3)
 
 
 	def collate_fn(self, data):
-		max_len = self.max_cap_len
+		max_len = self._cap_max_len
 
 		# Take a one caption for each image
 		data = [(image, captions[random.randrange(0, len(captions))]) for image, captions in data]
@@ -196,7 +203,7 @@ class CocoCap(object):
 
 
 def main():
-	coco_data = CocoCap(max_cap_len=70)
+	coco_data = CocoCap(params)
 
 #	start_epoch = coco_data.load() + 1
 	start_epoch = 0
