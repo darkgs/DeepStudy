@@ -1,5 +1,7 @@
 
 import torch
+import torch.optim as optim
+
 import torch.nn as nn
 
 from cifar10 import Cifar10
