@@ -45,6 +45,20 @@ class DecoderRNN(nn.Module):
 	def forward(self, features, captions, lengths):
 		embeddings = self.embed(captions)
 		embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
+
+		"""
+		outputs = []
+		hidden = None
+		for step in range(self._max_seq_length):
+			inputs = embeddings[:,step,:].unsqueeze(1)
+			hiddens, hidden = self.lstm(inputs, hidden)
+
+			outputs.append(hiddens.squeeze(1))
+		outputs = torch.stack(outputs, 1)
+		outputs = pack_padded_sequence(outputs, lengths, batch_first=True)
+		outputs = self.linear(outputs[0])
+		"""
+
 		packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
 		hiddens, _ = self.lstm(packed)
 		outputs = self.linear(hiddens[0])

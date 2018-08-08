@@ -38,23 +38,20 @@ class AttentionDecoderRNN(nn.Module):
 		super(AttentionDecoderRNN, self).__init__()
 
 		embed_size = params['embed_size']
-		hidden_size = params['rnn_hidden_size']
+		self._hidden_size = params['rnn_hidden_size']
 		num_layers = params['rnn_num_layers']
 		self._max_seq_length = params['cap_max_len']
 		att_L = params['att_L']
 
 		self.embed = nn.Embedding(vocab_size, embed_size)
-		self.lstm = nn.LSTM(embed_size+hidden_size, hidden_size, num_layers, batch_first=True)
-		self.lstm_cell = nn.LSTMCell(embed_size+hidden_size, hidden_size, num_layers)
-		self.linear = nn.Linear(hidden_size, vocab_size)
+		self.lstm = nn.LSTM(embed_size+self._hidden_size,
+				self._hidden_size, num_layers, batch_first=True)
+#		self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
+		self.linear = nn.Linear(self._hidden_size, vocab_size)
 
-		self.attn = nn.Linear(embed_size+hidden_size, att_L)
+		self.attn = nn.Linear(embed_size+self._hidden_size, att_L)
 
-	def initialize_hidden(self, features):
-		return (torch.mean(features, 1).unsqueeze(0),
-				torch.mean(features, 1).unsqueeze(0))
-
-	def get_start_states(self):
+	def get_start_states(self, batch_size, hidden_size):
 		h0 = torch.zeros(1, 64, 1024).cuda()
 		c0 = torch.zeros(1, 64, 1024).cuda()
 		return (h0, c0)
@@ -65,16 +62,16 @@ class AttentionDecoderRNN(nn.Module):
 
 		# att_weights : batch_size x 1 x att_L
 		att_cat = self.attn(torch.cat([inputs, hidden_t], dim=2))
-		att_weights = F.softmax(F.relu(att_cat), dim=1)
+		att_weights = F.softmax(F.relu(att_cat), dim=2)
 		# att_applied : batch_size x 1 x (attn_D=hidden_size)
-		return att_weights.bmm(features)
+		return torch.bmm(att_weights, features)
 
 	def forward(self, features, captions, lengths):
 		# features : batch_size x attn_L x (attn_D=hidden_size)
 
 		# init hidden using features
-		hidden = self.get_start_states()
-#		hidden = self.initialize_hidden(features)
+		hidden = self.get_start_states(features.size(0), self._hidden_size)
+		att_input = torch.mean(features, 1).unsqueeze(1)
 
 		embeddings = self.embed(captions)
 
@@ -83,7 +80,8 @@ class AttentionDecoderRNN(nn.Module):
 			# inputs : batch_size x 1 x embeding_dim
 			inputs = embeddings[:,step,:].unsqueeze(1)
 
-			att_input = self._attention(inputs, hidden, features)
+			if step != 0:
+				att_input = self._attention(inputs, hidden, features)
 			inputs = torch.cat([inputs, att_input], dim=2)
 
 			hiddens, hidden = self.lstm(inputs, hidden)
@@ -99,11 +97,13 @@ class AttentionDecoderRNN(nn.Module):
 		sampled_ids = []
 
 		inputs = self.embed(start_input)
+		att_input = torch.mean(features, 1).unsqueeze(1)
 		# init hidden using features
 		hidden = self.initialize_hidden(features)
-		for _ in range(self._max_seq_length):
+		for step in range(self._max_seq_length):
 			# hiddens: (batch_size, 1, hidden_size)
-			att_input = self._attention(inputs, hidden, features)
+			if step != 0:
+				att_input = self._attention(inputs, hidden, features)
 			inputs = torch.cat([inputs, att_input], dim=2)
 
 			hiddens, hidden = self.lstm(inputs, hidden)

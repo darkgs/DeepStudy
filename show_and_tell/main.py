@@ -16,10 +16,10 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence
 
-from simple_cnn_rnn import EncoderCNN
-from simple_cnn_rnn import DecoderRNN
-#from attention_model import AttentionEncoderCNN as EncoderCNN
-#from attention_model import AttentionDecoderRNN as DecoderRNN
+#from simple_cnn_rnn import EncoderCNN
+#from simple_cnn_rnn import DecoderRNN
+from attention_model import AttentionEncoderCNN as EncoderCNN
+from attention_model import AttentionDecoderRNN as DecoderRNN
 
 from mscoco_voca import CocoVoca
 
@@ -123,16 +123,13 @@ class CocoCap(object):
 
 		total_count = len(self.data_loader['train'])
 		for i, data in enumerate(self.data_loader['train'], 0):
-			if i > 150:
-				break
 			images, captions, lengths = data[0].to(self.device), data[1].to(self.device), data[2]
 
-
 			features = self.encoder(images)
-#			outputs = self.decoder(features, captions[:,:-1], [l-1 for l in lengths])
-#			targets = pack_padded_sequence(captions[:,1:], [l-1 for l in lengths], batch_first=True)[0]
-			outputs = self.decoder(features, captions, lengths)
-			targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+			outputs = self.decoder(features, captions[:,:-1], [l-1 for l in lengths])
+			targets = pack_padded_sequence(captions[:,1:], [l-1 for l in lengths], batch_first=True)[0]
+#			outputs = self.decoder(features, captions, lengths)
+#			targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
 			loss = self.criterion(outputs, targets)
 
@@ -217,14 +214,14 @@ class CocoCap(object):
 def main():
 	coco_data = CocoCap(params)
 
-#	start_epoch = coco_data.load() + 1
+	start_epoch = coco_data.load() + 1
 	start_epoch = 0
-	for epoch in range(start_epoch, 1):
+	for epoch in range(start_epoch, 10):
 		epoch_start_time = time.time()	
 		print('epoch {} : start trainning'.format(epoch))
 		coco_data.train()
 		print('epoch {} : train tooks {}'.format(epoch, time.time() - epoch_start_time))
-#		coco_data.save(epoch)
+		coco_data.save(epoch)
 
 	coco_data.test()
 
