@@ -3,4 +3,6 @@ tags
 *.swp
 log.txt
 model/
+*/model/
 data
+*/.ipynb_checkpoints

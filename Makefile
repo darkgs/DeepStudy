@@ -1,5 +1,5 @@
 
-all: show_and_tell
+all: decon
 
 .PHONY: simple_cnn google_net res_net run show_and_tell
 
@@ -14,4 +14,7 @@ res_net:
 
 show_and_tell:
 	@python3 show_and_tell/main.py
+
+decon:
+	@python3 deconvolution/main.py
 

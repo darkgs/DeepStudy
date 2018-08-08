@@ -6,24 +6,34 @@ import torch.nn.functional as F
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 
+def to_var(x):
+	if torch.cuda.is_available():
+		return x.cuda()
+
 class AttentionEncoderCNN(nn.Module):
 	def __init__(self, params):
 		super(AttentionEncoderCNN, self).__init__()
 
 		rnn_hidden_size = params['rnn_hidden_size']
 
+		"""
 		resnet = models.resnet152(pretrained=True)
 		modules = list(resnet.children())[:-3]
-		self.resnet = nn.Sequential(*modules)
+		self.cnn = nn.Sequential(*modules)
 		# batch_size x 1024 x 14 x 14
-		self._prev_vec_dim = 1024
+		"""
+		vgg19 = models.vgg19_bn(pretrained=True)
+		modules = list(vgg19.children())[0][:-1]
+		self.cnn = nn.Sequential(*modules)
+		# batch_size x 512 x 14 x 14
+		self._prev_vec_dim = 512
 		params['att_L'] = 14*14
 
 		self.linear = nn.Linear(self._prev_vec_dim, rnn_hidden_size)
 
 	def forward(self, images):
 		with torch.no_grad():
-			features = self.resnet(images)
+			features = self.cnn(images)
 			batch_size = features.size(0)
 			features = features.view(batch_size, -1, self._prev_vec_dim)
 
@@ -52,8 +62,8 @@ class AttentionDecoderRNN(nn.Module):
 		self.attn = nn.Linear(embed_size+self._hidden_size, att_L)
 
 	def get_start_states(self, batch_size, hidden_size):
-		h0 = torch.zeros(1, 64, 1024).cuda()
-		c0 = torch.zeros(1, 64, 1024).cuda()
+		h0 = to_var(torch.zeros(1, batch_size, hidden_size))
+		c0 = to_var(torch.zeros(1, batch_size, hidden_size))
 		return (h0, c0)
 
 	def _attention(self, inputs, hidden, features):
@@ -70,7 +80,7 @@ class AttentionDecoderRNN(nn.Module):
 		# features : batch_size x attn_L x (attn_D=hidden_size)
 
 		# init hidden using features
-		hidden = self.get_start_states(features.size(0), self._hidden_size)
+		hidden = self.get_start_states(captions.size(0), self._hidden_size)
 		att_input = torch.mean(features, 1).unsqueeze(1)
 
 		embeddings = self.embed(captions)
@@ -99,7 +109,7 @@ class AttentionDecoderRNN(nn.Module):
 		inputs = self.embed(start_input)
 		att_input = torch.mean(features, 1).unsqueeze(1)
 		# init hidden using features
-		hidden = self.initialize_hidden(features)
+		hidden = self.get_start_states(start_input.size(0), self._hidden_size)
 		for step in range(self._max_seq_length):
 			# hiddens: (batch_size, 1, hidden_size)
 			if step != 0:
