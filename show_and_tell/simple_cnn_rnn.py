@@ -9,9 +9,7 @@ class EncoderCNN(nn.Module):
 	def __init__(self, params):
 		super(EncoderCNN, self).__init__()
 
-		self._params = params
-
-		embed_size = self._params['embed_size']
+		embed_size = params['embed_size']
 
 		resnet = models.resnet152(pretrained=True)
 		modules = list(resnet.children())[:-1]      # delete the last fc layer.
@@ -27,6 +25,9 @@ class EncoderCNN(nn.Module):
 			features = features.reshape(batch_size, -1)
 			features = self.bn(self.linear(features))
 		return features
+
+	def get_optim_params(self):
+		return list(self.linear.parameters()) + list(self.bn.parameters())
 
 class DecoderRNN(nn.Module):
 	def __init__(self, params, vocab_size):
@@ -68,4 +69,7 @@ class DecoderRNN(nn.Module):
 		# sampled_ids: (batch_size, max_seq_length)
 		sampled_ids = torch.stack(sampled_ids, 1)
 		return sampled_ids
+
+	def get_optim_params(self):
+		return list(self.parameters())
 

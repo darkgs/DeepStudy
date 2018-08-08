@@ -18,16 +18,18 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 from simple_cnn_rnn import EncoderCNN
 from simple_cnn_rnn import DecoderRNN
+#from attention_model import AttentionEncoderCNN as EncoderCNN
+#from attention_model import AttentionDecoderRNN as DecoderRNN
 
 from mscoco_voca import CocoVoca
 
 params = {
 	'batch_size': 64,
 	'embed_size': 1024,
-	'rnn_hidden_size': 2048,
+	'rnn_hidden_size': 1024,	# same with att_D
 	'rnn_num_layers': 1,
-	'cap_max_len': 70,
-	'device': torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
+	'cap_max_len': 80,
+#	'att_L': 14*14, will be set from Encoder
 }
 
 class CocoCap(object):
@@ -35,14 +37,11 @@ class CocoCap(object):
 	def __init__(self, params):
 
 		batch_size = params['batch_size']
-		embed_size = params['embed_size']
-		rnn_hidden_size = params['rnn_hidden_size']
-		num_layers = params['rnn_num_layers']
 		self._cap_max_len = params['cap_max_len']
 
 		self.voca = CocoVoca()
 
-		self.device = params['device']
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 		scale_transform = transforms.Compose([
 #			transforms.ToPILImage(),
@@ -59,8 +58,7 @@ class CocoCap(object):
 
 			self.data_loader[data_type] = torch.utils.data.DataLoader(dataset=coco_dataset,
 					batch_size=batch_size,
-#					shuffle=True,
-					shuffle=False,
+					shuffle=True,
 					num_workers=4,
 					collate_fn=self.collate_fn)
 
@@ -68,8 +66,9 @@ class CocoCap(object):
 		self.decoder = DecoderRNN(params, len(self.voca)).to(self.device)
 
 		self.criterion = nn.CrossEntropyLoss()
-#		params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters()) + list(self.encoder.bn.parameters())
-		optim_params = list(self.decoder.parameters()) + list(self.encoder.linear.parameters())
+
+		optim_params = self.encoder.get_optim_params()
+		optim_params += self.decoder.get_optim_params()
 		self.optimizer = torch.optim.Adam(optim_params, lr=1e-3)
 
 
@@ -101,16 +100,18 @@ class CocoCap(object):
 
 		lengths = [min(len(cap), max_len) for i, cap in enumerate(captions)]
 	
-		targets = torch.LongTensor(
+		captions = torch.LongTensor(
 			[caption_to_idx_vector(cap) for i, cap in enumerate(captions)]
 		)
 	
-		return images, targets, lengths
+		return images, captions, lengths
 
 
 	def train(self, decoder_hidden=None):
 		self.decoder.train()
 		self.encoder.train()
+
+		self.optimizer.zero_grad()
 
 		def repackage_hidden(h):
 			if h is None:
@@ -126,11 +127,12 @@ class CocoCap(object):
 				break
 			images, captions, lengths = data[0].to(self.device), data[1].to(self.device), data[2]
 
-			targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
 			features = self.encoder(images)
-
+#			outputs = self.decoder(features, captions[:,:-1], [l-1 for l in lengths])
+#			targets = pack_padded_sequence(captions[:,1:], [l-1 for l in lengths], batch_first=True)[0]
 			outputs = self.decoder(features, captions, lengths)
+			targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
 			loss = self.criterion(outputs, targets)
 
@@ -142,6 +144,7 @@ class CocoCap(object):
 
 
 	def test(self):
+		batch_size = params['batch_size']
 
 		with torch.no_grad():
 			self.decoder.eval()
@@ -151,17 +154,26 @@ class CocoCap(object):
 			for i, data in enumerate(self.data_loader['val'], 0):
 
 				images, captions, lengths = data[0].to(self.device), data[1].to(self.device), data[2]
-				start_input = torch.LongTensor([self.voca.get_idx_from_word('<start>')]*64).to(self.device)
-				start_input.reshape(64,1,1)
+				# start taged intput
+				start_input = torch.LongTensor([self.voca.get_idx_from_word('<start>')]*batch_size).to(self.device)
+				start_input = start_input.view(batch_size,1)
 
 				feature = self.encoder(images)
 				sampled_ids = self.decoder.sample(start_input, feature)
 
 				sampled_ids = sampled_ids[0].cpu().numpy()
 				
-				generated_caption = [
-					self.voca.get_word_from_idx(idx) for idx in sampled_ids if idx not in []
-				]
+				generated_caption = []
+				for idx in sampled_ids:
+					word = self.voca.get_word_from_idx(idx)
+					
+					if word == '<start>':
+						continue
+					elif word == '<end>':
+						break
+
+					generated_caption.append(word)
+
 				print(' '.join(generated_caption))
 				break
 
