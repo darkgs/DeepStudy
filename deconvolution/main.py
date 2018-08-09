@@ -12,64 +12,41 @@ import torchvision
 import torchvision.transforms as transforms
 import torchvision.models as models
 
-class VGG16_conv(nn.Module):
+class SimpleCNN(nn.Module):
 	def __init__(self, n_classes):
-		super(VGG16_conv, self).__init__()
+		super(SimpleCNN, self).__init__()
 
 		self.features = nn.Sequential(
-			# conv1
-			nn.Conv2d(3, 64, 3, padding=1),
+			# input : 32 x 32 x 3
+			nn.Conv2d(3, 64, 7, stride=1, padding=3),
+			#  32 x 32 x 64
 			nn.ReLU(),
-			nn.Conv2d(64, 64, 3, padding=1),
+			nn.MaxPool2d(3, stride=2, padding=1, return_indices=True),
+			#  16 x 16 x 64
+			nn.Conv2d(64, 128, 3, stride=1, padding=1),
+			#  16 x 16 x 128
 			nn.ReLU(),
-			nn.MaxPool2d(2, stride=2, return_indices=True),
-			# conv2
-			nn.Conv2d(64, 128, 3, padding=1),
+			nn.MaxPool2d(3, stride=2, padding=1, return_indices=True),
+			#  8 x 8 x 128
+			nn.Conv2d(128, 128, 3, stride=1, padding=1),
+			#  8 x 8 x 128
 			nn.ReLU(),
-			nn.Conv2d(128, 128, 3, padding=1),
-			nn.ReLU(),
-			nn.MaxPool2d(2, stride=2, return_indices=True),
-			# conv3
-			nn.Conv2d(128, 256, 3, padding=1),
-			nn.ReLU(),
-			nn.Conv2d(256, 256, 3, padding=1),
-			nn.ReLU(),
-			nn.Conv2d(256, 256, 3, padding=1),
-			nn.ReLU(),
-			nn.MaxPool2d(2, stride=2, return_indices=True),
-			# conv4
-			nn.Conv2d(256, 512, 3, padding=1),
-			nn.ReLU(),
-			nn.Conv2d(512, 512, 3, padding=1),
-			nn.ReLU(),
-			nn.Conv2d(512, 512, 3, padding=1),
-			nn.ReLU(),
-			nn.MaxPool2d(2, stride=2, return_indices=True),
-			# conv5
-			nn.Conv2d(512, 512, 3, padding=1),
-			nn.ReLU(),
-			nn.Conv2d(512, 512, 3, padding=1),
-			nn.ReLU(),
-			nn.Conv2d(512, 512, 3, padding=1),
-			nn.ReLU(),
-			nn.MaxPool2d(2, stride=2, return_indices=True),
+			nn.MaxPool2d(3, stride=2, padding=1, return_indices=True),
+			#  4 x 4 x 128
 		)
 
 		self.feature_outputs = [0] * len(self.features)
 		self.pool_indices = {}
 
 		self.classifier = nn.Sequential(
-			nn.Linear(512*7*7, 4096),  # 224x244 image pooled down to 7x7 from features
+			nn.Linear(4*4*128, 256),
 			nn.ReLU(),
 			nn.Dropout(),
-			nn.Linear(4096, 4096),
+			nn.Linear(256, 64),
 			nn.ReLU(),
 			nn.Dropout(),
-			nn.Linear(4096, n_classes),
+			nn.Linear(64, n_classes),
 		)
-
-	def get_conv_layer_indices(self):
-		return [0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28]
 
 	def forward_features(self, x):
 		output = x
@@ -90,92 +67,68 @@ class VGG16_conv(nn.Module):
 		return output
 
 
-class VGG16_deconv(nn.Module):
+class CnnDeconv(nn.Module):
 	def __init__(self, trained_model):
-		super(VGG16_deconv, self).__init__()
-		self.conv2DeconvIdx = {0:17, 2:16, 5:14, 7:13, 10:11, 12:10, 14:9, 17:7, 19:6, 21:5, 24:3, 26:2, 28:1}
-		self.conv2DeconvBiasIdx = {0:16, 2:14, 5:13, 7:11, 10:10, 12:9, 14:7, 17:6, 19:5, 21:3, 24:2, 26:1, 28:0}
-		self.unpool2PoolIdx = {15:4, 12:9, 8:16, 4:23, 0:30}
+		super(CnnDeconv, self).__init__()
 
-		self.deconv_features = nn.Sequential(
-			nn.MaxUnpool2d(2, stride=2),
-			nn.ConvTranspose2d(512, 512, 3, padding=1),
-			nn.ConvTranspose2d(512, 512, 3, padding=1),
-			nn.ConvTranspose2d(512, 512, 3, padding=1),
-			nn.MaxUnpool2d(2, stride=2),
-			nn.ConvTranspose2d(512, 512, 3, padding=1),
-			nn.ConvTranspose2d(512, 512, 3, padding=1),
-			nn.ConvTranspose2d(512, 256, 3, padding=1),
-			nn.MaxUnpool2d(2, stride=2),
-			nn.ConvTranspose2d(256, 256, 3, padding=1),
-			nn.ConvTranspose2d(256, 256, 3, padding=1),
-			nn.ConvTranspose2d(256, 128, 3, padding=1),
-			nn.MaxUnpool2d(2, stride=2),
-			nn.ConvTranspose2d(128, 128, 3, padding=1),
-			nn.ConvTranspose2d(128, 64, 3, padding=1),
-			nn.MaxUnpool2d(2, stride=2),
-			nn.ConvTranspose2d(64, 64, 3, padding=1),
-			nn.ConvTranspose2d(64, 3, 3, padding=1),
-		)
+		self.idx_ori2deconv = {}
+		self.conv_indices = []
 
-		self.deconv_first_layers = torch.nn.ModuleList(
-			[
-				nn.MaxUnpool2d(2, stride=2),
-				nn.ConvTranspose2d(1, 512, 3, padding=1),
-				nn.ConvTranspose2d(1, 512, 3, padding=1),
-				nn.ConvTranspose2d(1, 512, 3, padding=1),
-				nn.MaxUnpool2d(2, stride=2),
-				nn.ConvTranspose2d(1, 512, 3, padding=1),
-				nn.ConvTranspose2d(1, 512, 3, padding=1),
-				nn.ConvTranspose2d(1, 256, 3, padding=1),
-				nn.MaxUnpool2d(2, stride=2),
-				nn.ConvTranspose2d(1, 256, 3, padding=1),
-				nn.ConvTranspose2d(1, 256, 3, padding=1),
-				nn.ConvTranspose2d(1, 128, 3, padding=1),
-				nn.MaxUnpool2d(2, stride=2),
-				nn.ConvTranspose2d(1, 128, 3, padding=1),
-				nn.ConvTranspose2d(1, 64, 3, padding=1),
-				nn.MaxUnpool2d(2, stride=2),
-				nn.ConvTranspose2d(1, 64, 3, padding=1),
-				nn.ConvTranspose2d(1, 3, 3, padding=1),
-			]
-		)
+		deconv_modules = []
+		trained_modules = list(trained_model.children())[0]
+		for i, module in reversed(list(enumerate(trained_modules))):
+			if isinstance(module, nn.Conv2d):
+				deconv_idx = len(deconv_modules)
+				self.idx_ori2deconv[i] = deconv_idx
+				self.conv_indices.append(i)
 
-		self._initialize_weights(self, trained_model)
+				deconv_modules.append(
+					nn.ConvTranspose2d(module.out_channels, module.in_channels,
+#					nn.ConvTranspose2d(module.in_channels, module.out_channels,
+						module.kernel_size, stride=module.stride, padding=module.padding)
+				)
+			elif isinstance(module, nn.MaxPool2d):
+				deconv_idx = len(deconv_modules)
+				self.idx_ori2deconv[i] = deconv_idx
 
-	def _initialize_weights(self, trained_vgg16):
-		# initializing weights using ImageNet-trained model from PyTorch
-		for i, layer in enumerate(trained_vgg16.features):
-			if isinstance(layer, torch.nn.Conv2d):
-				self.deconv_features[self.conv2DeconvIdx[i]].weight.data = layer.weight.data
-				biasIdx = self.conv2DeconvBiasIdx[i]
-				if biasIdx > 0:
-					self.deconv_features[biasIdx].bias.data = layer.bias.data
+				deconv_modules.append(
+					nn.MaxUnpool2d(module.kernel_size, stride=module.stride, padding=module.padding)
+				)
+
+		self.bias_idx_ori2deconv = {
+			self.conv_indices[i]: self.idx_ori2deconv[self.conv_indices[i-1]] for i in range(1, len(self.conv_indices))
+		}
+		self.idx_deconv2ori = {
+			d:o for o, d in self.idx_ori2deconv.items()
+		}
+
+		self.deconv = nn.Sequential(*deconv_modules)
+		self._initialize_weights(trained_model)
 
 
-	def forward(self, x, layer_number, map_number, pool_indices):
-		start_idx = self.conv2DeconvIdx[layer_number]
+	def _initialize_weights(self, trained_model):
+		for i, layer in enumerate(trained_model.features):
+			if isinstance(layer, nn.Conv2d):
+				self.deconv[self.idx_ori2deconv[i]].weight.data = layer.weight.data
 
-		if not isinstance(self.deconv_first_layers[start_idx], torch.nn.ConvTranspose2d):
-			raise ValueError('Layer '+str(layer_number)+' is not of type Conv2d')
+				bias_idx = self.bias_idx_ori2deconv.get(i, -1)
+				if bias_idx >= 0:
+					self.deconv[bias_idx].bias.data = layer.bias.data
 
-		# set weight and bias
-		self.deconv_first_layers[start_idx].weight.data = self.deconv_features[start_idx].weight[map_number].data[None, :, :, :]
-		self.deconv_first_layers[start_idx].bias.data = self.deconv_features[start_idx].bias.data
-		# first layer will be single channeled, since we're picking a particular filter
-		output = self.deconv_first_layers[start_idx](x)
 
-		# transpose conv through the rest of the network
-		for i in range(start_idx+1, len(self.deconv_features)):
-			if isinstance(self.deconv_features[i], torch.nn.MaxUnpool2d):
-				output = self.deconv_features[i](output, pool_indices[self.unpool2PoolIdx[i]])
+	def forward(self, features_out, idx_ori, pool_indices):
+		print(self.idx_deconv2ori)
+		output = features_out
+		start_idx = self.idx_ori2deconv[idx_ori]
+		for i in range(start_idx+1, len(self.deconv)):
+			if isinstance(self.deconv[i], nn.MaxUnpool2d):
+				output = self.deconv[i](output, pool_indices[self.idx_deconv2ori[i]])
 			else:
-				output = self.deconv_features[i](output)
-
+				output = self.deconv[i](output)
 		return output
+				
 
-
-class Cifar10_VGG(object):
+class Cifar10_CNN(object):
 	def __init__(self):
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		# classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
@@ -184,8 +137,8 @@ class Cifar10_VGG(object):
 		transform_train = transforms.Compose(
 				[
 					transforms.RandomHorizontalFlip(),
-					transforms.Resize((256,256)),
-					transforms.RandomCrop(224, 224),
+#					transforms.Resize((256,256)),
+#					transforms.RandomCrop(224, 224),
 					transforms.ToTensor(),
 					transforms.Normalize((0.4914, 0.4822, 0.4465),
 						(0.247, 0.243, 0.261)),
@@ -193,8 +146,8 @@ class Cifar10_VGG(object):
 
 		transform_test = transforms.Compose(
 				[
-					transforms.Resize((256,256)),
-					transforms.RandomCrop(224, 224),
+#					transforms.Resize((256,256)),
+#					transforms.RandomCrop(224, 224),
 					transforms.ToTensor(),
 					transforms.Normalize((0.4914, 0.4822, 0.4465),
 						(0.247, 0.243, 0.261)),
@@ -203,12 +156,12 @@ class Cifar10_VGG(object):
 		self.trainset = torchvision.datasets.CIFAR10(root='./data',
 				train=True, transform=transform_train)
 		self.trainloader = torch.utils.data.DataLoader(self.trainset,
-				batch_size=16, shuffle=True, num_workers=8)
+				batch_size=128, shuffle=True, num_workers=8)
 
 		self.testset = torchvision.datasets.CIFAR10(root='./data',
 				train=False, transform=transform_test)
 		self.testloader = torch.utils.data.DataLoader(self.testset,
-				batch_size=16, shuffle=False, num_workers=8)
+				batch_size=64, shuffle=False, num_workers=8)
 
 		self.set_model()
 		self.set_criterion()
@@ -224,14 +177,14 @@ class Cifar10_VGG(object):
 				nn.init.xavier_normal_(m.weight.data)
 				nn.init.normal_(m.bias.data)
 
-		self.model = VGG16_conv(n_classes=10).to(self.device)
+		self.model = SimpleCNN(n_classes=10).to(self.device)
 		self.model.apply(weights_init)
 
 	def set_criterion(self):
 		self.criterion = nn.CrossEntropyLoss()
 
 	def set_optimizer(self):
-#		self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
+#		self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
 		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4)
 
 
@@ -240,12 +193,7 @@ class Cifar10_VGG(object):
 			correct = 0
 			total = 0
 			self.model.eval()
-			total_count = len(self.trainloader)
 			for i, data in enumerate(self.testloader, 0):
-				if i % 100 == 0:
-					print('test : {}/{}'.format(i, total_count))
-				if i > 100:
-					break
 
 				images, labels = data[0].to(self.device), data[1].to(self.device)
 
@@ -264,16 +212,8 @@ class Cifar10_VGG(object):
 		acum_loss = 0.0
 		count = 0
 
-#		for param_group in self.optimizer.param_groups:
-#			print(param_group['lr'])
-
 		total_count = len(self.trainloader)
 		for i, data in enumerate(self.trainloader, 0):
-			if i % 100 == 0:
-				print('train : {}/{}'.format(i, total_count))
-			if i > 300:
-				break
-
 			inputs, labels = data[0].to(self.device), data[1].to(self.device)
 
 			# zero the parameter gradients
@@ -329,21 +269,50 @@ class Cifar10_VGG(object):
 
 		return states['epoch']
 
+	def deconvolution(self):
+		with torch.no_grad():
+			self.model.eval()
+
+			deconv_model = CnnDeconv(self.model)
+
+			picked = None
+			for data in self.testloader:
+				if picked == None:
+					picked = data
+
+			batch_idx = 3
+
+			inputs, labels = picked[0].to(self.device), picked[1].to(self.device)
+			outputs = self.model(inputs)
+
+			total_layers = len(self.model.feature_outputs)
+			pool_indices = self.model.pool_indices
+			conv_indices = list(reversed(deconv_model.conv_indices))
+
+			layer = 1
+
+			layer_idx = conv_indices[layer] 
+			conv_feature = self.model.feature_outputs[layer_idx]
+
+			outputs = deconv_model(conv_feature, layer_idx, pool_indices)
+#	def forward(self, features_out, idx_ori, pool_indices):
+
+			print(outputs.shape)
 
 def main():
 
-	model = Cifar10_VGG()
+	model = Cifar10_CNN()
 
 	start_time = time.time()
 	start_epoch = model.load() + 1
-	for epoch in range(start_epoch, 10):
+	for epoch in range(start_epoch, 100):
 		epoch_loss = model.train()
 		acc = model.test()
 
-		model.save()
+		model.save(epoch)
 		print('epoch {} : loss({}) acc({}%) time({})'.format(epoch, epoch_loss, acc, time.time()-start_time))
-
-	deconv_model = VGG16_deconv(model)
+	
+	model.deconvolution()
 
 if __name__ == '__main__':
 	main()
