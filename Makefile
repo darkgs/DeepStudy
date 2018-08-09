@@ -1,5 +1,5 @@
 
-all: decon
+all: show_and_tell
 
 .PHONY: simple_cnn google_net res_net run show_and_tell
 

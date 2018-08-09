@@ -17,7 +17,7 @@ def main():
 	coco_data = CocoCap(params)
 
 	start_epoch = coco_data.load() + 1
-	for epoch in range(start_epoch, 2):
+	for epoch in range(start_epoch, 20):
 		epoch_start_time = time.time()	
 		print('epoch {} : start trainning'.format(epoch))
 		coco_data.train()
