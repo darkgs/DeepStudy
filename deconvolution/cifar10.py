@@ -194,7 +194,7 @@ class Cifar10_CNN(object):
 				conv_feature = self.model.feature_outputs[layer_idx].clone()
 
 				# top-k sum of weight feature
-				_, top_indices = conv_feature.view(conv_feature.size(0), conv_feature.size(1), -1).sum(2).topk(topk, largest=True)
+				_, top_indices = torch.abs(conv_feature.view(conv_feature.size(0), conv_feature.size(1), -1)).sum(2).topk(topk, largest=True)
 				top_indices_b = [list(arr) for arr in list(top_indices.cpu().numpy())]
 			
 				# make reduced weight channel tensor
