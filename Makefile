@@ -1,7 +1,7 @@
 
-all: autoencoder
+all: gan
 
-.PHONY: simple_cnn google_net res_net run show_and_tell autoencoder
+.PHONY: simple_cnn google_net res_net run show_and_tell autoencoder gan
 
 simple_cnn:
 	@python3 image_classification/simple_cnn.py
@@ -20,4 +20,8 @@ decon:
 
 autoencoder:
 	@python3 autoencoder/main.py
+
+gan:
+	@python3 gan/main.py
+
 
