@@ -1,7 +1,7 @@
 
-all: decon
+all: autoencoder
 
-.PHONY: simple_cnn google_net res_net run show_and_tell
+.PHONY: simple_cnn google_net res_net run show_and_tell autoencoder
 
 simple_cnn:
 	@python3 image_classification/simple_cnn.py
@@ -17,4 +17,7 @@ show_and_tell:
 
 decon:
 	@python3 deconvolution/main.py
+
+autoencoder:
+	@python3 autoencoder/main.py
 
