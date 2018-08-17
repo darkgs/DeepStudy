@@ -25,8 +25,23 @@ class Generator(nn.Module):
 		self.map2 = nn.Linear(hidden_dim, hidden_dim)
 		self.map3 = nn.Linear(hidden_dim, output_dim)
 
+		self.model = nn.Sequential(
+			nn.Linear(100,256),
+			nn.LeakyReLU(0.2, inplace=True),
+			nn.Linear(256,512),
+			nn.LeakyReLU(0.2, inplace=True),
+			nn.Linear(512,1024),
+			nn.LeakyReLU(0.2, inplace=True),
+			nn.Linear(1024,784),
+			nn.Tanh(),
+		)
+
 	def forward(self, x):
-		x = F.relu(self.map1(x))
+#		x = x.view(x.size(0), 100)
+#		out = self.model(x)
+#		return out
+
+		x = F.elu(self.map1(x))
 		x = F.sigmoid(self.map2(x))
 		return self.map3(x)
 
@@ -39,9 +54,27 @@ class Discriminator(nn.Module):
 		self.map2 = nn.Linear(hidden_dim, hidden_dim)
 		self.map3 = nn.Linear(hidden_dim, output_dim)
 
+		self.model = nn.Sequential(
+			nn.Linear(784, 1024),
+			nn.LeakyReLU(0.2, inplace=True),
+			nn.Dropout(0.3),
+			nn.Linear(1024, 512),
+			nn.LeakyReLU(0.2, inplace=True),
+			nn.Dropout(0.3),
+			nn.Linear(512, 256),
+			nn.LeakyReLU(0.2, inplace=True),
+			nn.Dropout(0.3),
+			nn.Linear(256, 1),
+			nn.Sigmoid(),
+		)
+
 	def forward(self, x):
-		x = F.relu(self.map1(x.view(-1, 28*28)))
-		x = F.relu(self.map2(x))
+#		out = self.model(x.view(x.size(0), 784))
+#		out = out.view(out.size(0), -1)
+#		return out
+
+		x = F.elu(self.map1(x.view(-1, 28*28)))
+		x = F.elu(self.map2(x))
 		return F.sigmoid(self.map3(x))
 
 
@@ -58,7 +91,7 @@ class MNIST_GAN(object):
 		# Prepare MNIST dataset
 		data_transform = transforms.Compose([
 			transforms.ToTensor(),
-			transforms.Normalize((0.1307,), (0.3081,)),
+			transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)),
 		])
 
 		self._train_data_loader = torch.utils.data.DataLoader(
@@ -82,8 +115,8 @@ class MNIST_GAN(object):
 
 		# Optimizer
 		self._optimizer = {
-			'g': torch.optim.Adam(self._g.parameters(), lr=lr),
-			'd': torch.optim.Adam(self._d.parameters(), lr=lr),
+			'g': torch.optim.Adam(self._g.parameters(), lr=lr, betas=(0.5,0.999)),
+			'd': torch.optim.Adam(self._d.parameters(), lr=lr, betas=(0.5,0.999)),
 		}
 
 		self._criterion = nn.BCELoss()
@@ -123,6 +156,7 @@ class MNIST_GAN(object):
 			data = data.to(self._device)
 			batch_size = data.size(0)
 
+			self._g.zero_grad()
 			self._d.zero_grad()
 
 			g_data = self._g(self.entropy()[:batch_size,:])
@@ -143,6 +177,7 @@ class MNIST_GAN(object):
 				optimizer.zero_grad()
 
 			self._g.zero_grad()
+			self._d.zero_grad()
 
 			g_data = self._g(self.entropy()[:batch_size,:])
 			d_fake = self._d(g_data)
@@ -206,8 +241,8 @@ class MNIST_GAN(object):
 def main():
 	params = {
 		'batch_size': 64,
-		'entropy_dim': 512,
-		'hidden_dim': 512,
+		'entropy_dim': 100,
+		'hidden_dim': 314,
 		'lr': 1e-3,
 	}
 
